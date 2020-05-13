@@ -1,0 +1,11 @@
+matplotlib
+numpy
+pyside2
+
+git+https://github.com/abey79/vpype#egg=vpype
+https://cdn.evilmadscientist.com/dl/ad/public/AxiDraw_API.zip#pyaxidraw
+
+
+# dev/debug
+pytest
+black

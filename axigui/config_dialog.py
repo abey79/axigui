@@ -1,0 +1,67 @@
+from PySide2.QtCore import QSettings
+from PySide2.QtWidgets import (
+    QWidget,
+    QFormLayout,
+    QComboBox,
+    QSpinBox, QDialog, QDialogButtonBox,
+)
+
+from .axy import axy
+
+
+class ConfigDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        options = {
+            "pen_pos_down": ("Pen position down:", (0, 100), 40),
+            "pen_pos_up": ("Pen position up:", (0, 100), 60),
+            "pen_rate_lower": ("Pen rate lower:", (1, 100), 50),
+            "pen_rate_raise": ("Pen rate raise:", (1, 100), 75),
+            "pen_delay_down": ("Pen delay down:", (-500, 500), 0),
+            "pen_delay_up": ("Pen delay up:", (-500, 500), 0),
+            "speed_pendown": ("Speed (pen down):", (1, 110), 25),
+            "speed_penup": ("Speed (pen up):", (1, 110), 75),
+            "accel": ("Acceleration:", (1, 100), 75),
+        }
+
+        settings = QSettings()
+        layout = QFormLayout()
+
+        class SettingUpdater:
+            def __init__(self, k):
+                self.key = k
+
+            def __call__(self, value):
+                settings.setValue(self.key, value)
+
+        for key, (label, (min_val, max_val), default) in options.items():
+            spin_box = QSpinBox()
+            spin_box.setRange(min_val, max_val)
+            spin_box.valueChanged.connect(lambda value: axy.set_option(key, value))
+            spin_box.setValue(settings.value(key, default))
+            spin_box.setSingleStep(1)
+            spin_box.valueChanged.connect(SettingUpdater(key))
+            layout.addRow(label, spin_box)
+
+        model = QComboBox()
+        model.addItem("Axidraw V2 or V3", 1)
+        model.addItem("Axidraw V3/A3 or SE/A3", 2)
+        model.addItem("Axidraw V3 XLX", 3)
+        model.addItem("Axidraw MiniKit", 4)
+        model.currentIndexChanged.connect(
+            lambda index: axy.set_option("model", model.itemData(index))
+        )
+        model.setCurrentIndex(settings.value("model", 0))
+        model.currentIndexChanged.connect(
+            lambda index: settings.setValue("model", index)
+        )
+        layout.addRow("Model:", model)
+
+        btn_box = QDialogButtonBox()
+        btn_box.setStandardButtons(QDialogButtonBox.Ok)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addRow(btn_box)
+
+        self.setLayout(layout)

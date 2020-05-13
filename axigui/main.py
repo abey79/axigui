@@ -2,26 +2,21 @@ import sys
 from typing import Tuple
 
 import vpype
-from PySide2.QtCore import QSettings
 from PySide2.QtGui import QPalette, QColor, Qt
 from PySide2.QtWidgets import (
     QVBoxLayout,
     QPushButton,
     QApplication,
     QWidget,
-    QFormLayout,
-    QComboBox,
     QTabWidget,
-    QSpinBox,
     QHBoxLayout,
     QSpacerItem,
-    QSizePolicy,
+    QSizePolicy, QToolBar,
 )
 
-from .axy_stub import Axy
+from .axy import axy
+from .config_dialog import ConfigDialog
 from .vector_data_plot_widget import VectorDataPlotWidget
-
-axy = Axy()
 
 
 def _mm_to_px(x: float, y: float) -> Tuple[float, float]:
@@ -39,74 +34,23 @@ PAGE_FORMATS = {
 }
 
 
-class ConfigWidget(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        options = {
-            "pen_pos_down": ("Pen position down:", (0, 100), 40),
-            "pen_pos_up": ("Pen position up:", (0, 100), 60),
-            "pen_rate_lower": ("Pen rate lower:", (1, 100), 50),
-            "pen_rate_raise": ("Pen rate raise:", (1, 100), 75),
-            "pen_delay_down": ("Pen delay down:", (-500, 500), 0),
-            "pen_delay_up": ("Pen delay up:", (-500, 500), 0),
-            "speed_pendown": ("Speed (pen down):", (1, 110), 25),
-            "speed_penup": ("Speed (pen up):", (1, 110), 75),
-            "accel": ("Acceleration:", (1, 100), 75),
-        }
-
-        settings = QSettings()
-        layout = QFormLayout()
-
-        class SettingUpdater:
-            def __init__(self, k):
-                self.key = k
-
-            def __call__(self, value):
-                settings.setValue(self.key, value)
-
-        for key, (label, (min_val, max_val), default) in options.items():
-            spin_box = QSpinBox()
-            spin_box.setRange(min_val, max_val)
-            spin_box.valueChanged.connect(lambda value: axy.set_option(key, value))
-            spin_box.setValue(settings.value(key, default))
-            spin_box.setSingleStep(1)
-            spin_box.valueChanged.connect(SettingUpdater(key))
-            layout.addRow(label, spin_box)
-
-        model = QComboBox()
-        model.addItem("Axidraw V2 or V3", 1)
-        model.addItem("Axidraw V3/A3 or SE/A3", 2)
-        model.addItem("Axidraw V3 XLX", 3)
-        model.addItem("Axidraw MiniKit", 4)
-        model.currentIndexChanged.connect(
-            lambda index: axy.set_option("model", model.itemData(index))
-        )
-        model.setCurrentIndex(settings.value("model", 0))
-        model.currentIndexChanged.connect(
-            lambda index: settings.setValue("model", index)
-        )
-        layout.addRow("Model:", model)
-
-        self.setLayout(layout)
-
-
 class PlotControlWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        vd = vpype.VectorData()
+        vd.add(vpype.LineCollection([(0, 100), (200, 101 + 101j)]), 1)
+        self.base_vector_data = vd
+        self.vector_data = vd
+        self.page_format = "A4"
+        self.plot = VectorDataPlotWidget()
+        self.update_plot()
 
         # setup button
         pen_up_btn = QPushButton("UP")
         pen_down_btn = QPushButton("DOWN")
         pen_up_btn.clicked.connect(lambda: axy.pen_up())
         pen_down_btn.clicked.connect(lambda: axy.pen_down())
-
-        # setup plot
-        self.plot = VectorDataPlotWidget()
-        vd = vpype.VectorData()
-        vd.add(vpype.LineCollection([(0, 100), (200, 101 + 101j)]), 1)
-        self.plot.vector_data = vd
-        self.plot.page_format = PAGE_FORMATS['A4']
 
         # button layout
         btn_layout = QVBoxLayout()
@@ -120,21 +64,33 @@ class PlotControlWidget(QWidget):
 
         # setup layout
         root_layout = QHBoxLayout()
+        root_layout.setSpacing(0)
+        root_layout.setMargin(0)
         root_layout.addWidget(self.plot)
         root_layout.addWidget(btn_widget)
         self.setLayout(root_layout)
+
+    def update_plot(self):
+        self.vector_data = vpype.VectorData()
+        self.vector_data.extend(self.base_vector_data)
+        self.plot.vector_data = self.vector_data
+        self.plot.page_format = PAGE_FORMATS["A4"]
 
 
 class MainWindow(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self._tab_widget = QTabWidget()
-        self._tab_widget.addTab(PlotControlWidget(), "Plot")
-        self._tab_widget.addTab(ConfigWidget(), "Config")
+        self._toolbar = QToolBar()
+        load_act = self._toolbar.addAction("Load")
+        config_act = self._toolbar.addAction("Config")
+        config_act.triggered.connect(lambda: ConfigDialog().exec_())
 
         layout = QVBoxLayout()
-        layout.addWidget(self._tab_widget)
+        layout.setSpacing(0)
+        layout.setMargin(0)
+        layout.addWidget(self._toolbar)
+        layout.addWidget(PlotControlWidget())
         self.setLayout(layout)
 
 

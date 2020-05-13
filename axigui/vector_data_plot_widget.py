@@ -41,7 +41,8 @@ class VectorDataPlotWidget(QWidget):
         # initialise canvas/figure/axes according to
         # https://matplotlib.org/examples/user_interfaces/embedding_in_qt5.html
         self.fig = Figure(figsize=(10, 10), facecolor=(1, 1, 1), edgecolor=(0, 0, 0))
-        self.ax = self.fig.add_subplot(111)
+        self.ax = self.fig.add_axes((0, 0, 1, 1))
+        self.ax.tick_params(pad=-5)
         self.canvas = FigureCanvas(self.fig)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.updateGeometry()
@@ -144,6 +145,7 @@ class VectorDataPlotWidget(QWidget):
     @unit.setter
     def unit(self, value: str):
         self._unit = value
+        self._init_lims = True
         self._replot()
 
     @property
@@ -205,12 +207,17 @@ class VectorDataPlotWidget(QWidget):
 
         scale = 1 / vpype.convert(self._unit)
 
+        # draw page
+        w = self._page_format[0] * scale
+        h = self._page_format[1] * scale
+        dw = 10 * scale
         self.ax.plot(
-            np.array([0, 1, 1, 0, 0]) * self._page_format[0] * scale,
-            np.array([0, 0, 1, 1, 0]) * self._page_format[1] * scale,
-            "-r",
-            lw=2,
-            alpha=0.2,
+            np.array([0, 1, 1, 0, 0]) * w, np.array([0, 0, 1, 1, 0]) * h, "-k", lw=0.25,
+        )
+        self.ax.fill(
+            np.array([w, w + dw, w + dw, dw, dw, w]),
+            np.array([dw, dw, h + dw, h + dw, h, h]),
+            "k", alpha=0.3
         )
 
         color_idx = 0
@@ -295,10 +302,19 @@ class VectorDataPlotWidget(QWidget):
         else:
             self.ax.axis("off")
         if self._show_grid:
-            self.ax.grid("on")
+            self.ax.grid("on", alpha=0.2)
 
         if old_lims is not None:
-            self.ax.set_xlim(old_lims[0], emit=False)
-            self.ax.set_ylim(old_lims[1], emit=False)
+            self.ax.set_xlim(old_lims[0])
+            self.ax.set_ylim(old_lims[1])
+        else:
+            self.toolbar.update()
 
+        for text in self.ax.get_xticklabels():
+            text.set_horizontalalignment('center')
+            text.set_verticalalignment('bottom')
+
+        for text in self.ax.get_yticklabels():
+            text.set_horizontalalignment('left')
+            text.set_verticalalignment('center')
         self.canvas.draw()

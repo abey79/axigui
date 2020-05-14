@@ -19,7 +19,7 @@ from PySide2.QtWidgets import (
     QComboBox,
     QFormLayout,
     QCheckBox,
-    QDoubleSpinBox,
+    QDoubleSpinBox, QListView,
 )
 
 from .axy import axy
@@ -52,9 +52,7 @@ class PlotControlWidget(QWidget):
         self.settings = QSettings()
         self.settings.beginGroup("plot_control")
 
-        vd = vpype.VectorData()
-        vd.add(vpype.LineCollection([(0, 100), (200, 1001 + 201j)]), 1)  # FIXME
-        self.base_vector_data = vd
+        self.base_vector_data = vpype.VectorData()
         self.vector_data: vpype.VectorData = None
 
         # settings
@@ -67,7 +65,6 @@ class PlotControlWidget(QWidget):
         self.margin_value: float = self.settings.value("margin_value", 2.0)
         self.margin_unit: str = self.settings.value("margin_unit", "cm")
         self.plot = VectorDataPlotWidget()
-        self.update_view()
 
         # page layout controls
         page_box = QGroupBox("Page layout")
@@ -128,8 +125,11 @@ class PlotControlWidget(QWidget):
         action_layout.addRow("Motor off:", shutdown_btn)
         action_box.setLayout(action_layout)
 
+        self.list = QListView()
+
         # controls layout
         controls_layout = QVBoxLayout()
+        controls_layout.addWidget(self.list)
         controls_layout.addWidget(page_box)
         controls_layout.addWidget(action_box)
         controls_layout.addItem(
@@ -145,6 +145,17 @@ class PlotControlWidget(QWidget):
         self.setLayout(root_layout)
 
         self.update_view()
+
+        # FIXME: stub vector data
+        vd = vpype.VectorData()
+        vd.add(vpype.LineCollection([(0, 100), (200, 1001 + 201j)]), 1)
+        vd.add(vpype.LineCollection([(0, 100+100j), (300j, 400j+100)]), 2)
+        self.set_vector_data(vd)
+
+    def set_vector_data(self, vector_data: vpype.VectorData):
+        self.base_vector_data = vector_data
+        self.update_view()
+        self.list.setModel(self.plot.get_item_model())
 
     def set_page_format(self, page_format: str):
         self.page_format = page_format

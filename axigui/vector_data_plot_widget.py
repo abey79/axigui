@@ -1,10 +1,13 @@
-from typing import Tuple
+import collections
+from dataclasses import dataclass, field
+from typing import Tuple, Iterable, List, Any
 
 import matplotlib
 import matplotlib.collections
 import numpy as np
 import vpype
-from PySide2.QtCore import QSettings
+from PySide2.QtCore import QSettings, Qt
+from PySide2.QtGui import QStandardItemModel, QStandardItem, QPixmap, QColor, QIcon
 from PySide2.QtWidgets import (
     QVBoxLayout,
     QWidget,
@@ -37,6 +40,16 @@ matplotlib.use("Qt5Agg")
 
 
 class VectorDataPlotWidget(QWidget):
+    Layer = collections.namedtuple("Layer", "visible color lines")
+
+    @dataclass
+    class Layer:
+        """Keep track of layer information"""
+
+        color: Iterable = (0, 0, 0)
+        lines: List[Any] = field(default_factory=list)
+        visible: bool = True
+
     # noinspection PyTypeChecker
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -58,6 +71,7 @@ class VectorDataPlotWidget(QWidget):
         self._vector_data = vpype.VectorData()
         self._page_format = (100, 100)  # in pixels
         self._init_lims = True
+        self._layers = {}
 
         # settings
         self._unit: str = self.settings.value("unit", "cm")
@@ -128,6 +142,17 @@ class VectorDataPlotWidget(QWidget):
     def vector_data(self, vd):
         self._vector_data = vd
         self._init_lims = True
+
+        # setup layer map and assign colors
+        self._layers = {}
+        color_idx = 0
+        for lid in self._vector_data.layers:
+            color = COLORS[color_idx]
+            color_idx += 1
+            if color_idx >= len(COLORS):
+                color_idx = color_idx % len(COLORS)
+            self._layers[lid] = self.Layer(visible=True, color=color, lines=[])
+
         self._replot()
 
     @property
@@ -203,6 +228,37 @@ class VectorDataPlotWidget(QWidget):
         self.settings.setValue("show_legend", value)
         self._replot()
 
+    def set_layer_visible(self, layer_id: int, visible: bool):
+        if layer_id in self._layers:
+            layer_spec = self._layers[layer_id]
+            layer_spec.visible = visible
+            for ln in layer_spec.lines:
+                ln.set_visible(layer_spec.visible)
+            self.canvas.draw()
+
+    def get_item_model(self) -> QStandardItemModel:
+        model = QStandardItemModel()
+        for lid, layer in self._layers.items():
+            item = QStandardItem()
+            item.setCheckable(True)
+            item.setCheckState(Qt.Checked if layer.visible else Qt.Unchecked)
+            pixmap = QPixmap(16, 12)
+            pixmap.fill(QColor(*[c * 255 for c in layer.color]))
+            item.setIcon(QIcon(pixmap))
+            item.setText(f"Layer {lid}")
+            item.setSelectable(False)
+            item.setEditable(False)
+            item.setData(lid, Qt.UserRole + 1)
+            model.appendRow(item)
+
+        model.itemChanged.connect(
+            lambda it: self.set_layer_visible(
+                it.data(Qt.UserRole + 1), it.checkState() == Qt.Checked
+            )
+        )
+
+        return model
+
     def _replot(self):
 
         for cid in self.cids:
@@ -231,18 +287,16 @@ class VectorDataPlotWidget(QWidget):
         )
 
         color_idx = 0
-        collections = {}
         for layer_id, lc in self._vector_data.layers.items():
             if self._colorful:
                 color = COLORS[color_idx:] + COLORS[:color_idx]
                 marker_color = "k"
                 color_idx += len(lc)
+                if color_idx >= len(COLORS):
+                    color_idx = color_idx % len(COLORS)
             else:
-                color = COLORS[color_idx]
+                color = self._layers[layer_id].color
                 marker_color = [color]
-                color_idx += 1
-            if color_idx >= len(COLORS):
-                color_idx = color_idx % len(COLORS)
 
             layer_lines = matplotlib.collections.LineCollection(
                 (vpype.as_vector(line) * scale for line in lc),
@@ -251,7 +305,7 @@ class VectorDataPlotWidget(QWidget):
                 alpha=0.5,
                 label=str(layer_id),
             )
-            collections[layer_id] = [layer_lines]
+            self._layers[layer_id].lines = [layer_lines]
             self.ax.add_collection(layer_lines)
 
             if self._show_points:
@@ -259,7 +313,7 @@ class VectorDataPlotWidget(QWidget):
                 layer_points = self.ax.scatter(
                     points.real, points.imag, marker=".", c=marker_color, s=16
                 )
-                collections[layer_id].append(layer_points)
+                self._layers[layer_id].lines.append(layer_points)
 
             if self._show_pen_up:
                 pen_up_lines = matplotlib.collections.LineCollection(
@@ -274,13 +328,19 @@ class VectorDataPlotWidget(QWidget):
                     lw=0.5,
                     alpha=0.5,
                 )
-                collections[layer_id].append(pen_up_lines)
+                self._layers[layer_id].lines.append(pen_up_lines)
                 self.ax.add_collection(pen_up_lines)
 
         self.ax.invert_yaxis()
         self.ax.axis("equal")
 
-        if self._show_legend:
+        # set visibility
+        for layer_spec in self._layers.values():
+            if not layer_spec.visible:
+                for ln in layer_spec.lines:
+                    ln.set_visible(False)
+
+        if self._show_legend and len(self._layers) > 0:
             lgd = self.ax.legend(loc="upper right")
             # we will set up a dict mapping legend line to orig line, and enable
             # picking on the legend line
@@ -288,16 +348,18 @@ class VectorDataPlotWidget(QWidget):
             for lgd_line, lgd_text in zip(lgd.get_lines(), lgd.get_texts()):
                 lgd_line.set_picker(5)  # 5 pts tolerance
                 layer_id = int(lgd_text.get_text())
-                if layer_id in collections:
-                    line_dict[lgd_line] = collections[layer_id]
+                if layer_id in self._layers:
+                    line_dict[lgd_line] = layer_id
 
+            # noinspection PyShadowingNames
             def on_pick(event):
                 line = event.artist
-                vis = not line_dict[line][0].get_visible()
-                for ln in line_dict[line]:
-                    ln.set_visible(vis)
+                layer_spec = self._layers[line_dict[line]]
+                layer_spec.visible = not layer_spec.visible
+                for ln in layer_spec.lines:
+                    ln.set_visible(layer_spec.visible)
 
-                if vis:
+                if layer_spec.visible:
                     line.set_alpha(1.0)
                 else:
                     line.set_alpha(0.2)

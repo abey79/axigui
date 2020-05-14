@@ -1,9 +1,10 @@
 from PySide2.QtCore import QSettings
 from PySide2.QtWidgets import (
-    QWidget,
     QFormLayout,
     QComboBox,
-    QSpinBox, QDialog, QDialogButtonBox,
+    QSpinBox,
+    QDialog,
+    QDialogButtonBox,
 )
 
 from .axy import axy
@@ -53,9 +54,7 @@ class ConfigDialog(QDialog):
             lambda index: axy.set_option("model", model.itemData(index))
         )
         model.setCurrentIndex(settings.value("model", 0))
-        model.currentIndexChanged.connect(
-            lambda index: settings.setValue("model", index)
-        )
+        model.currentIndexChanged.connect(lambda index: settings.setValue("model", index))
         layout.addRow("Model:", model)
 
         btn_box = QDialogButtonBox()

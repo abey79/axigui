@@ -4,6 +4,7 @@ import matplotlib
 import matplotlib.collections
 import numpy as np
 import vpype
+from PySide2.QtCore import QSettings
 from PySide2.QtWidgets import (
     QVBoxLayout,
     QWidget,
@@ -11,7 +12,6 @@ from PySide2.QtWidgets import (
     QCheckBox,
     QSizePolicy,
     QSpacerItem,
-    QComboBox,
     QLabel,
 )
 from matplotlib.backends.backend_qt5agg import (
@@ -37,8 +37,12 @@ matplotlib.use("Qt5Agg")
 
 
 class VectorDataPlotWidget(QWidget):
+    # noinspection PyTypeChecker
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.settings = QSettings()
+        self.settings.beginGroup("plot_display")
 
         # initialise canvas/figure/axes according to
         # https://matplotlib.org/examples/user_interfaces/embedding_in_qt5.html
@@ -54,13 +58,15 @@ class VectorDataPlotWidget(QWidget):
         self._vector_data = vpype.VectorData()
         self._page_format = (100, 100)  # in pixels
         self._init_lims = True
-        self._unit = "cm"
-        self._colorful = False
-        self._show_points = False
-        self._show_pen_up = False
-        self._show_axes = False
-        self._show_grid = False
-        self._show_legend = True
+
+        # settings
+        self._unit: str = self.settings.value("unit", "cm")
+        self._colorful: bool = self.settings.value("colorful", False)
+        self._show_points: bool = self.settings.value("show_points", False)
+        self._show_pen_up: bool = self.settings.value("show_pen_up", False)
+        self._show_axes: bool = self.settings.value("show_axes", False)
+        self._show_grid: bool = self.settings.value("show_grid", False)
+        self._show_legend: bool = self.settings.value("show_legend", True)
 
         # matplotlib hooks to be removed upon redraw
         self.cids = []
@@ -141,6 +147,7 @@ class VectorDataPlotWidget(QWidget):
     @unit.setter
     def unit(self, value: str):
         self._unit = value
+        self.settings.setValue("unit", value)
         self._init_lims = True
         self._replot()
 
@@ -151,6 +158,7 @@ class VectorDataPlotWidget(QWidget):
     @colorful.setter
     def colorful(self, value: bool):
         self._colorful = value
+        self.settings.setValue("colorful", value)
         self._replot()
 
     @property
@@ -160,6 +168,7 @@ class VectorDataPlotWidget(QWidget):
     @show_points.setter
     def show_points(self, value: bool):
         self._show_points = value
+        self.settings.setValue("show_points", value)
         self._replot()
 
     @property
@@ -169,6 +178,7 @@ class VectorDataPlotWidget(QWidget):
     @show_pen_up.setter
     def show_pen_up(self, value):
         self._show_pen_up = value
+        self.settings.setValue("show_pen_up", value)
         self._replot()
 
     @property
@@ -179,6 +189,8 @@ class VectorDataPlotWidget(QWidget):
     def show_axes(self, value):
         self._show_axes = value
         self._show_grid = value
+        self.settings.setValue("show_axes", value)
+        self.settings.setValue("show_grid", value)
         self._replot()
 
     @property
@@ -188,6 +200,7 @@ class VectorDataPlotWidget(QWidget):
     @show_legend.setter
     def show_legend(self, value):
         self._show_legend = value
+        self.settings.setValue("show_legend", value)
         self._replot()
 
     def _replot(self):

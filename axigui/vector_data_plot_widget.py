@@ -20,6 +20,8 @@ from matplotlib.backends.backend_qt5agg import (
 )
 from matplotlib.figure import Figure
 
+from axigui.utils import UnitComboBox
+
 COLORS = [
     (0, 0, 1),
     (0, 0.5, 0),
@@ -64,12 +66,8 @@ class VectorDataPlotWidget(QWidget):
         self.cids = []
 
         # control bar
-        scale = QComboBox()
-        scale.addItem("px")
-        scale.addItem("cm")
-        scale.addItem("mm")
-        scale.addItem("in")
-        scale.setCurrentIndex(1)
+        scale = UnitComboBox()
+        scale.setCurrentText(self._unit)
         scale.currentTextChanged.connect(lambda text: setattr(self, "unit", text))
         colorful_check = QCheckBox("Colorful")
         colorful_check.setChecked(self._colorful)
@@ -105,9 +103,7 @@ class VectorDataPlotWidget(QWidget):
         ctrl_layout.addWidget(show_pen_up_check)
         ctrl_layout.addWidget(show_axes_check)
         ctrl_layout.addWidget(show_legend_check)
-        ctrl_layout.addItem(
-            QSpacerItem(5, 5, QSizePolicy.Expanding, QSizePolicy.Minimum)
-        )
+        ctrl_layout.addItem(QSpacerItem(5, 5, QSizePolicy.Expanding, QSizePolicy.Minimum))
         ctrl_widget = QWidget()
         ctrl_widget.setLayout(ctrl_layout)
 
@@ -217,7 +213,8 @@ class VectorDataPlotWidget(QWidget):
         self.ax.fill(
             np.array([w, w + dw, w + dw, dw, dw, w]),
             np.array([dw, dw, h + dw, h + dw, h, h]),
-            "k", alpha=0.3
+            "k",
+            alpha=0.3,
         )
 
         color_idx = 0
@@ -271,7 +268,7 @@ class VectorDataPlotWidget(QWidget):
         self.ax.axis("equal")
 
         if self._show_legend:
-            lgd = self.ax.legend()
+            lgd = self.ax.legend(loc="upper right")
             # we will set up a dict mapping legend line to orig line, and enable
             # picking on the legend line
             line_dict = {}
@@ -311,10 +308,10 @@ class VectorDataPlotWidget(QWidget):
             self.toolbar.update()
 
         for text in self.ax.get_xticklabels():
-            text.set_horizontalalignment('center')
-            text.set_verticalalignment('bottom')
+            text.set_horizontalalignment("center")
+            text.set_verticalalignment("bottom")
 
         for text in self.ax.get_yticklabels():
-            text.set_horizontalalignment('left')
-            text.set_verticalalignment('center')
+            text.set_horizontalalignment("left")
+            text.set_verticalalignment("center")
         self.canvas.draw()

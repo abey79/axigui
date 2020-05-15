@@ -1,4 +1,5 @@
 import collections
+import itertools
 from dataclasses import dataclass, field
 from typing import Tuple, Iterable, List, Any
 
@@ -6,34 +7,24 @@ import matplotlib
 import matplotlib.collections
 import numpy as np
 import vpype
-from PySide2.QtCore import QSettings, Qt
-from PySide2.QtGui import QStandardItemModel, QStandardItem, QPixmap, QColor, QIcon
+from PySide2.QtCore import QSettings
 from PySide2.QtWidgets import (
     QVBoxLayout,
     QWidget,
-    QHBoxLayout,
-    QCheckBox,
     QSizePolicy,
-    QSpacerItem,
-    QLabel,
 )
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT as NavigationToolbar,
 )
+from matplotlib.colors import hsv_to_rgb
 from matplotlib.figure import Figure
 
-from axigui.utils import UnitComboBox
-
 COLORS = [
-    (0, 0, 1),
-    (0, 0.5, 0),
-    (1, 0, 0),
-    (0, 0.75, 0.75),
-    (0, 1, 0),
-    (0.75, 0, 0.75),
-    (0.75, 0.75, 0),
-    (0, 0, 0),
+    hsv_to_rgb((h, s, v))
+    for v, s, h in list(
+        itertools.product((0.8, 0.5), (1, 0.5, 0.25), (0, 0.14, 0.35, 0.5, 0.6, 0.75, 0.9),)
+    )
 ]
 
 matplotlib.use("Qt5Agg")
@@ -80,56 +71,11 @@ class VectorDataPlotWidget(QWidget):
         self._show_pen_up: bool = self.settings.value("show_pen_up", False)
         self._show_axes: bool = self.settings.value("show_axes", False)
         self._show_grid: bool = self.settings.value("show_grid", False)
-        self._show_legend: bool = self.settings.value("show_legend", True)
-
-        # matplotlib hooks to be removed upon redraw
-        self.cids = []
-
-        # control bar
-        scale = UnitComboBox()
-        scale.setCurrentText(self._unit)
-        scale.currentTextChanged.connect(lambda text: setattr(self, "unit", text))
-        colorful_check = QCheckBox("Colorful")
-        colorful_check.setChecked(self._colorful)
-        colorful_check.stateChanged.connect(
-            lambda: setattr(self, "colorful", colorful_check.isChecked())
-        )
-        show_points_check = QCheckBox("Show points")
-        show_points_check.setChecked(self._show_points)
-        show_points_check.stateChanged.connect(
-            lambda: setattr(self, "show_points", show_points_check.isChecked())
-        )
-        show_pen_up_check = QCheckBox("Show pen-up")
-        show_pen_up_check.setChecked(self._show_pen_up)
-        show_pen_up_check.stateChanged.connect(
-            lambda: setattr(self, "show_pen_up", show_pen_up_check.isChecked())
-        )
-        show_axes_check = QCheckBox("Show axes")
-        show_axes_check.setChecked(self._show_axes)
-        show_axes_check.stateChanged.connect(
-            lambda: setattr(self, "show_axes", show_axes_check.isChecked())
-        )
-        show_legend_check = QCheckBox("Show legend")
-        show_legend_check.setChecked(self._show_legend)
-        show_legend_check.stateChanged.connect(
-            lambda: setattr(self, "show_legend", show_legend_check.isChecked())
-        )
-
-        ctrl_layout = QHBoxLayout()
-        ctrl_layout.addWidget(QLabel("Unit:"))
-        ctrl_layout.addWidget(scale)
-        ctrl_layout.addWidget(colorful_check)
-        ctrl_layout.addWidget(show_points_check)
-        ctrl_layout.addWidget(show_pen_up_check)
-        ctrl_layout.addWidget(show_axes_check)
-        ctrl_layout.addWidget(show_legend_check)
-        ctrl_layout.addItem(QSpacerItem(5, 5, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        ctrl_widget = QWidget()
-        ctrl_widget.setLayout(ctrl_layout)
 
         # setup layout
         layout = QVBoxLayout()
-        layout.addWidget(ctrl_widget)
+        layout.setMargin(0)
+        layout.setSpacing(0)
         layout.addWidget(self.canvas)
         layout.addWidget(self.toolbar)
         self.setLayout(layout)
@@ -142,17 +88,21 @@ class VectorDataPlotWidget(QWidget):
     def vector_data(self, vd):
         self._vector_data = vd
         self._init_lims = True
-
-        # setup layer map and assign colors
-        self._layers = {}
+        new_layers = {}
+        keep_visibility = set(self._layers.keys()) == set(vd.layers.keys())
         color_idx = 0
         for lid in self._vector_data.layers:
             color = COLORS[color_idx]
             color_idx += 1
             if color_idx >= len(COLORS):
                 color_idx = color_idx % len(COLORS)
-            self._layers[lid] = self.Layer(visible=True, color=color, lines=[])
+            if keep_visibility:
+                visible = self._layers[lid].visible
+            else:
+                visible = True
+            new_layers[lid] = self.Layer(visible=visible, color=color, lines=[])
 
+        self._layers = new_layers
         self._replot()
 
     @property
@@ -218,15 +168,11 @@ class VectorDataPlotWidget(QWidget):
         self.settings.setValue("show_grid", value)
         self._replot()
 
-    @property
-    def show_legend(self) -> bool:
-        return self._show_legend
-
-    @show_legend.setter
-    def show_legend(self, value):
-        self._show_legend = value
-        self.settings.setValue("show_legend", value)
-        self._replot()
+    def layer_visible(self, layer_id: int) -> bool:
+        try:
+            return self._layers[layer_id].visible
+        except KeyError:
+            return False
 
     def set_layer_visible(self, layer_id: int, visible: bool):
         if layer_id in self._layers:
@@ -236,33 +182,13 @@ class VectorDataPlotWidget(QWidget):
                 ln.set_visible(layer_spec.visible)
             self.canvas.draw()
 
-    def get_item_model(self) -> QStandardItemModel:
-        model = QStandardItemModel()
-        for lid, layer in self._layers.items():
-            item = QStandardItem()
-            item.setCheckable(True)
-            item.setCheckState(Qt.Checked if layer.visible else Qt.Unchecked)
-            pixmap = QPixmap(16, 12)
-            pixmap.fill(QColor(*[c * 255 for c in layer.color]))
-            item.setIcon(QIcon(pixmap))
-            item.setText(f"Layer {lid}")
-            item.setSelectable(False)
-            item.setEditable(False)
-            item.setData(lid, Qt.UserRole + 1)
-            model.appendRow(item)
-
-        model.itemChanged.connect(
-            lambda it: self.set_layer_visible(
-                it.data(Qt.UserRole + 1), it.checkState() == Qt.Checked
-            )
-        )
-
-        return model
+    def layer_color(self, layer_id: int) -> Tuple[float, float, float]:
+        try:
+            return self._layers[layer_id].color
+        except KeyError:
+            return 0, 0, 0
 
     def _replot(self):
-
-        for cid in self.cids:
-            self.canvas.mpl_disconnect(cid)
         if not self._init_lims:
             old_lims = (self.ax.get_xlim(), self.ax.get_ylim())
         else:
@@ -339,33 +265,6 @@ class VectorDataPlotWidget(QWidget):
             if not layer_spec.visible:
                 for ln in layer_spec.lines:
                     ln.set_visible(False)
-
-        if self._show_legend and len(self._layers) > 0:
-            lgd = self.ax.legend(loc="upper right")
-            # we will set up a dict mapping legend line to orig line, and enable
-            # picking on the legend line
-            line_dict = {}
-            for lgd_line, lgd_text in zip(lgd.get_lines(), lgd.get_texts()):
-                lgd_line.set_picker(5)  # 5 pts tolerance
-                layer_id = int(lgd_text.get_text())
-                if layer_id in self._layers:
-                    line_dict[lgd_line] = layer_id
-
-            # noinspection PyShadowingNames
-            def on_pick(event):
-                line = event.artist
-                layer_spec = self._layers[line_dict[line]]
-                layer_spec.visible = not layer_spec.visible
-                for ln in layer_spec.lines:
-                    ln.set_visible(layer_spec.visible)
-
-                if layer_spec.visible:
-                    line.set_alpha(1.0)
-                else:
-                    line.set_alpha(0.2)
-                self.canvas.draw()
-
-            self.cids.append(self.canvas.mpl_connect("pick_event", on_pick))
 
         if self._show_axes or self._show_grid:
             self.ax.axis("on")

@@ -4,8 +4,16 @@ import sys
 from typing import Tuple
 
 import vpype
-from PySide2.QtCore import QSettings
-from PySide2.QtGui import QPalette, QColor, Qt
+from PySide2.QtCore import QSettings, QSize
+from PySide2.QtGui import (
+    QPalette,
+    QColor,
+    Qt,
+    QStandardItemModel,
+    QStandardItem,
+    QPixmap,
+    QIcon,
+)
 from PySide2.QtWidgets import (
     QVBoxLayout,
     QPushButton,
@@ -19,7 +27,10 @@ from PySide2.QtWidgets import (
     QComboBox,
     QFormLayout,
     QCheckBox,
-    QDoubleSpinBox, QListView,
+    QDoubleSpinBox,
+    QListView,
+    QFileDialog,
+    QStyle,
 )
 
 from .axy import axy
@@ -138,8 +149,6 @@ class PlotControlWidget(QWidget):
 
         # setup layout
         root_layout = QHBoxLayout()
-        root_layout.setSpacing(0)
-        root_layout.setMargin(0)
         root_layout.addWidget(self.plot)
         root_layout.addLayout(controls_layout)
         self.setLayout(root_layout)
@@ -147,15 +156,73 @@ class PlotControlWidget(QWidget):
         self.update_view()
 
         # FIXME: stub vector data
-        vd = vpype.VectorData()
-        vd.add(vpype.LineCollection([(0, 100), (200, 1001 + 201j)]), 1)
-        vd.add(vpype.LineCollection([(0, 100+100j), (300j, 400j+100)]), 2)
+        # vd = vpype.VectorData()
+        # vd.add(vpype.LineCollection([(0, 100), (200, 1001 + 201j)]), 1)
+        # vd.add(vpype.LineCollection([(0, 100 + 100j), (300j, 400j + 100)]), 2)
+        self.load_svg("/Users/hhip/Drive/axidraw/wheel_cards/wheel_card_triple_5_40.svg")
+        # self.load_svg("/Users/hhip/Downloads/spirograph-grids/spirograph-grid.svg")
+
+    def add_actions(self, toolbar: QToolBar):
+        colorful_act = toolbar.addAction(QIcon("images/icons_colorful.png"), "Colorful")
+        colorful_act.setCheckable(True)
+        colorful_act.setChecked(self.plot.colorful)
+        colorful_act.triggered.connect(lambda checked: setattr(self.plot, "colorful", checked))
+
+        show_points_act = toolbar.addAction(QIcon("images/icons_show_points.png"), "Points")
+        show_points_act.setCheckable(True)
+        show_points_act.setChecked(self.plot.show_points)
+        show_points_act.triggered.connect(
+            lambda checked: setattr(self.plot, "show_points", checked)
+        )
+
+        show_pen_up_act = toolbar.addAction(QIcon("images/icons_show_pen_up.png"), "Pen-Up")
+        show_pen_up_act.setCheckable(True)
+        show_pen_up_act.setChecked(self.plot.show_pen_up)
+        show_pen_up_act.triggered.connect(
+            lambda checked: setattr(self.plot, "show_pen_up", checked)
+        )
+
+        show_axes_act = toolbar.addAction(QIcon("images/icons_show_axes.png"), "Axes")
+        show_axes_act.setCheckable(True)
+        show_axes_act.setChecked(self.plot.show_axes)
+        show_axes_act.triggered.connect(
+            lambda checked: setattr(self.plot, "show_axes", checked)
+        )
+
+        scale = UnitComboBox()
+        scale.setCurrentText(self.plot.unit)
+        scale.currentTextChanged.connect(lambda text: setattr(self.plot, "unit", text))
+        toolbar.addWidget(scale)
+
+    def load_svg(self, path: str):
+        # TODO: make quantization a parameters
+        vd = vpype.read_multilayer_svg(path, 0.05)
         self.set_vector_data(vd)
 
     def set_vector_data(self, vector_data: vpype.VectorData):
         self.base_vector_data = vector_data
+
         self.update_view()
-        self.list.setModel(self.plot.get_item_model())
+        model = QStandardItemModel()
+        for lid in vector_data.layers:
+            item = QStandardItem()
+            item.setCheckable(True)
+            item.setCheckState(Qt.Checked if self.plot.layer_visible(lid) else Qt.Unchecked)
+            pixmap = QPixmap(16, 12)
+            pixmap.fill(QColor(*[c * 255 for c in self.plot.layer_color(lid)]))
+            item.setIcon(QIcon(pixmap))
+            item.setText(f"Layer {lid}")
+            item.setSelectable(False)
+            item.setEditable(False)
+            item.setData(lid, Qt.UserRole + 1)
+            model.appendRow(item)
+
+        model.itemChanged.connect(
+            lambda it: self.plot.set_layer_visible(
+                it.data(Qt.UserRole + 1), it.checkState() == Qt.Checked
+            )
+        )
+        self.list.setModel(model)
 
     def set_page_format(self, page_format: str):
         self.page_format = page_format
@@ -237,18 +304,34 @@ class MainWindow(QWidget):
 
         self.setWindowTitle("AxiGUI")
 
+        self._plot_control = PlotControlWidget()
+
         self._toolbar = QToolBar()
-        load_act = self._toolbar.addAction("Load")
-        load_act.triggered.connect(lambda: None)  # TODO: implement
+        self._toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self._toolbar.setIconSize(QSize(32, 32))
+        load_act = self._toolbar.addAction(
+            self.style().standardIcon(QStyle.SP_DialogOpenButton), "Load"
+        )
+        load_act.triggered.connect(lambda: self.load_svg())
         config_act = self._toolbar.addAction("Config")
         config_act.triggered.connect(lambda: ConfigDialog().exec_())
+        self._toolbar.addSeparator()
+        self._plot_control.add_actions(self._toolbar)
 
         layout = QVBoxLayout()
         layout.setSpacing(0)
         layout.setMargin(0)
         layout.addWidget(self._toolbar)
-        layout.addWidget(PlotControlWidget())
+        layout.addWidget(self._plot_control)
         self.setLayout(layout)
+
+    def load_svg(self):
+        # TODO: remember last folder opened in the session
+        path = QFileDialog.getOpenFileName(
+            self, "Choose SVG file:", "/Users/hhip/Drive/axidraw", "SVG (*.svg)"
+        )
+        if path[0]:
+            self._plot_control.load_svg(path[0])
 
 
 def main():

@@ -7,18 +7,18 @@ import matplotlib
 import matplotlib.collections
 import numpy as np
 import vpype
-from PySide2.QtCore import QSettings
-from PySide2.QtWidgets import (
-    QVBoxLayout,
-    QWidget,
-    QSizePolicy,
-)
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvasQTAgg as FigureCanvas,
     NavigationToolbar2QT as NavigationToolbar,
 )
 from matplotlib.colors import hsv_to_rgb
 from matplotlib.figure import Figure
+
+# this must be imported after matplotlib
+if True:  # hack to shield from pycharm' optimize imports
+    from PySide2.QtCore import QSettings
+    from PySide2.QtWidgets import QVBoxLayout, QWidget, QSizePolicy
+
 
 COLORS = [
     hsv_to_rgb((h, s, v))

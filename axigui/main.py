@@ -5,11 +5,10 @@ import sys
 from typing import Tuple
 
 import vpype
-from PySide2.QtCore import QSettings, QSize, QCoreApplication
+from PySide2.QtCore import QSettings, QSize, QCoreApplication, Qt
 from PySide2.QtGui import (
     QPalette,
     QColor,
-    Qt,
     QStandardItemModel,
     QStandardItem,
     QPixmap,

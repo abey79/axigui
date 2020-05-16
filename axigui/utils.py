@@ -1,5 +1,5 @@
 import vpype
-from PySide2.QtWidgets import QComboBox, QDoubleSpinBox
+from PySide2.QtWidgets import QComboBox
 
 
 class UnitComboBox(QComboBox):

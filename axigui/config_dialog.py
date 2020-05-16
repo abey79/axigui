@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from PySide2.QtCore import QSettings
 from PySide2.QtWidgets import (
     QFormLayout,
@@ -10,13 +12,33 @@ from PySide2.QtWidgets import (
 from .axy import axy
 
 
+@dataclass
+class SettingsMixin:
+    settings: QSettings
+    key: str
+
+
+class AxySettingsSpinBox(SettingsMixin, QSpinBox):
+    # noinspection PyTypeChecker
+    def __init__(self, settings, key, default, parent=None):
+        super().__init__(settings, key)
+        QSpinBox.__init__(self, parent=parent)
+
+        self.valueChanged.connect(lambda value: self._update_value(value))
+        self.setValue(self.settings.value(key, default))
+
+    def _update_value(self, value: int):
+        self.settings.setValue(self.key, value)
+        axy.set_option(self.key, value)
+
+
 class ConfigDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
         options = {
-            "pen_pos_down": ("Pen position down:", (0, 100), 40),
-            "pen_pos_up": ("Pen position up:", (0, 100), 60),
+            #"pen_pos_down": ("Pen position down:", (0, 100), 40),
+            #"pen_pos_up": ("Pen position up:", (0, 100), 60),
             "pen_rate_lower": ("Pen rate lower:", (1, 100), 50),
             "pen_rate_raise": ("Pen rate raise:", (1, 100), 75),
             "pen_delay_down": ("Pen delay down:", (-500, 500), 0),
@@ -29,20 +51,10 @@ class ConfigDialog(QDialog):
         settings = QSettings()
         layout = QFormLayout()
 
-        class SettingUpdater:
-            def __init__(self, k):
-                self.key = k
-
-            def __call__(self, value):
-                settings.setValue(self.key, value)
-
         for key, (label, (min_val, max_val), default) in options.items():
-            spin_box = QSpinBox()
+            spin_box = AxySettingsSpinBox(settings, key, default)
             spin_box.setRange(min_val, max_val)
-            spin_box.valueChanged.connect(lambda value: axy.set_option(key, value))
-            spin_box.setValue(settings.value(key, default))
             spin_box.setSingleStep(1)
-            spin_box.valueChanged.connect(SettingUpdater(key))
             layout.addRow(label, spin_box)
 
         model = QComboBox()

@@ -30,11 +30,10 @@ from PySide2.QtWidgets import (
     QDoubleSpinBox,
     QListView,
     QFileDialog,
-    QStyle,
 )
 
 from .axy import axy
-from .config_dialog import ConfigDialog
+from .config_dialog import ConfigDialog, AxySettingsSpinBox
 from .utils import UnitComboBox
 from .vector_data_plot_widget import VectorDataPlotWidget
 
@@ -127,16 +126,25 @@ class PlotControlWidget(QWidget):
         pen_down_btn = QPushButton("DOWN")
         pen_up_btn.clicked.connect(lambda: axy.pen_up())
         pen_down_btn.clicked.connect(lambda: axy.pen_down())
+        pen_up_spin = AxySettingsSpinBox(self.settings, "pen_pos_up", 60.0)
+        pen_down_spin = AxySettingsSpinBox(self.settings, "pen_pos_down", 40.0)
+        pen_up_layout = QHBoxLayout()
+        pen_up_layout.addWidget(pen_up_spin)
+        pen_up_layout.addWidget(pen_up_btn)
+        pen_down_layout = QHBoxLayout()
+        pen_down_layout.addWidget(pen_down_spin)
+        pen_down_layout.addWidget(pen_down_btn)
         shutdown_btn = QPushButton("OFF")
         shutdown_btn.clicked.connect(lambda: axy.shutdown())
         action_box = QGroupBox("Actions")
         action_layout = QFormLayout()
-        action_layout.addRow("Pen up: ", pen_up_btn)
-        action_layout.addRow("Pen down: ", pen_down_btn)
+        action_layout.addRow("Pen up: ", pen_up_layout)
+        action_layout.addRow("Pen down: ", pen_down_layout)
         action_layout.addRow("Motor off:", shutdown_btn)
         action_box.setLayout(action_layout)
 
         self.list = QListView()
+        self.list.setFixedHeight(120)
 
         # controls layout
         controls_layout = QVBoxLayout()
@@ -303,21 +311,20 @@ class MainWindow(QWidget):
         super().__init__(parent)
 
         self.setWindowTitle("AxiGUI")
-
+        self._config_dialog = ConfigDialog()
         self._plot_control = PlotControlWidget()
 
+        # setup toolbar
         self._toolbar = QToolBar()
-        self._toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        self._toolbar.setIconSize(QSize(32, 32))
-        load_act = self._toolbar.addAction(
-            self.style().standardIcon(QStyle.SP_DialogOpenButton), "Load"
-        )
+        self._toolbar.setIconSize(QSize(64, 64))
+        load_act = self._toolbar.addAction(QIcon("images/icons_open.png"), "Load")
         load_act.triggered.connect(lambda: self.load_svg())
-        config_act = self._toolbar.addAction("Config")
-        config_act.triggered.connect(lambda: ConfigDialog().exec_())
+        config_act = self._toolbar.addAction(QIcon("images/icons_settings.png"), "Config")
+        config_act.triggered.connect(lambda: self._config_dialog.exec_())
         self._toolbar.addSeparator()
         self._plot_control.add_actions(self._toolbar)
 
+        # setup layout
         layout = QVBoxLayout()
         layout.setSpacing(0)
         layout.setMargin(0)
@@ -359,6 +366,7 @@ def main():
 QSpinBox {
     padding-right: 1px; /* make room for the arrows */
     padding-left: 1px; /* make room for the arrows */
+    min-width: 75px;
 }
 
 QDoubleSpinBox {

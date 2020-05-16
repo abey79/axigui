@@ -16,7 +16,7 @@ class Axy:
         print(f"STUB: walk_y({y})")
 
     def plot_svg(self, svg: str):
-        print(f"STUB: plot_svg()")
+        print(f"STUB: plot_svg(str_len={len(svg)})")
 
     def shutdown(self):
         print(f"STUB: shutdown()")

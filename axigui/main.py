@@ -1,10 +1,11 @@
 import copy
+import io
 import math
 import sys
 from typing import Tuple
 
 import vpype
-from PySide2.QtCore import QSettings, QSize
+from PySide2.QtCore import QSettings, QSize, QCoreApplication
 from PySide2.QtGui import (
     QPalette,
     QColor,
@@ -74,7 +75,10 @@ class PlotControlWidget(QWidget):
         self.fit_page: bool = self.settings.value("fit_page", False)
         self.margin_value: float = self.settings.value("margin_value", 2.0)
         self.margin_unit: str = self.settings.value("margin_unit", "cm")
+
+        # setup plot area
         self.plot = VectorDataPlotWidget()
+        self.plot.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
 
         # page layout controls
         page_box = QGroupBox("Page layout")
@@ -136,15 +140,19 @@ class PlotControlWidget(QWidget):
         pen_down_layout.addWidget(pen_down_btn)
         shutdown_btn = QPushButton("OFF")
         shutdown_btn.clicked.connect(lambda: axy.shutdown())
+        plot_btn = QPushButton("PLOT")
+        plot_btn.clicked.connect(lambda: self.plot_svg())
         action_box = QGroupBox("Actions")
         action_layout = QFormLayout()
         action_layout.addRow("Pen up: ", pen_up_layout)
         action_layout.addRow("Pen down: ", pen_down_layout)
         action_layout.addRow("Motor off:", shutdown_btn)
+        action_layout.addRow("Plot:", plot_btn)
         action_box.setLayout(action_layout)
 
         self.list = QListView()
         self.list.setFixedHeight(120)
+        self.list.setSizePolicy(QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred))
 
         # controls layout
         controls_layout = QVBoxLayout()
@@ -206,6 +214,15 @@ class PlotControlWidget(QWidget):
         # TODO: make quantization a parameters
         vd = vpype.read_multilayer_svg(path, 0.05)
         self.set_vector_data(vd)
+
+    def plot_svg(self):
+        vd = vpype.VectorData()
+        for lid in self.vector_data.layers:
+            if self.plot.layer_visible(lid):
+                vd.add(self.vector_data.layers[lid], 1)
+        svg = io.StringIO()
+        vpype.write_svg(svg, vd, page_format=self.plot.page_format)
+        axy.plot_svg(svg.getvalue())
 
     def set_vector_data(self, vector_data: vpype.VectorData):
         self.base_vector_data = vector_data
@@ -323,6 +340,11 @@ class MainWindow(QWidget):
         config_act.triggered.connect(lambda: self._config_dialog.exec_())
         self._toolbar.addSeparator()
         self._plot_control.add_actions(self._toolbar)
+        empty = QWidget()
+        empty.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred))
+        self._toolbar.addWidget(empty)
+        quit_act = self._toolbar.addAction(QIcon("images/icons_exit.png"), "Quit")
+        quit_act.triggered.connect(lambda: QCoreApplication.quit())
 
         # setup layout
         layout = QVBoxLayout()
@@ -399,5 +421,7 @@ QToolTip { color: #ffffff; background-color: #2a82da; border: 1px solid white; }
     app.setOrganizationDomain("ab-ware.com")
 
     main_window = MainWindow()
-    main_window.show()
+    # TODO: make that an option
+    # main_window.show()
+    main_window.showFullScreen()
     sys.exit(app.exec_())
